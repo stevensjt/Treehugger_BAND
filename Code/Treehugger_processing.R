@@ -5,6 +5,7 @@
 
 ####0. Load libraries and functions####
 library(readxl)
+library(tidyverse)
 
 ####1. Import Automatic Dendroband data####
 file_list <- dir("./Data")
@@ -15,7 +16,7 @@ tree_list <- read_xlsx("./Data/tree list.xlsx", sheet = "Sheet1")
 for(n in tree_list$csv_name){
   if(any(grep(n,file_list))){
     
-    d <- read_csv(paste0("../Dendrobands/Treehugger data files/",
+    d <- read_csv(paste0("./Data/",
                          file_list[grep(n,file_list)]),
                   col_types = list(col_date(format = c("%Y-%m-%d")),col_time(format = "%H:%M"),
                                    col_double(),col_double(),col_double(),col_double(),
@@ -33,7 +34,7 @@ for(n in tree_list$csv_name){
     #START HEREd_daily <- d[grep("12:",d$Time),]
     
     print(paste0("printing ",n))
-    pdf(paste0("Figures/Treehugger/",n,".pdf"))
+    pdf(paste0("./Figures/",n,".pdf"))
     print(
       ggplot(d)+
         geom_line(aes(x = Date, y =dbh))+
