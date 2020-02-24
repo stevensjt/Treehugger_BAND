@@ -38,7 +38,7 @@ for(n in tree_list$csv_name){
     print(
       ggplot(d)+
         geom_line(aes(x = Date, y =dbh))+
-        ggtitle(n)
+        ggtitle(tree_list[tree_list$csv_name==n,"tree"])
     )
     #ggplot(d)+
     #  geom_line(aes(x = Date, y =dbh))+
