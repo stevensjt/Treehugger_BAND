@@ -11,6 +11,7 @@ library(tidyverse)
 library(lubridate)
 library(plotly)
 
+
 ####1. Import Automatic Dendroband data ####
 
 file_list <- dir("C:/Users/bgonzalez/DOI/NM Landscapes Field Station - Treehugger_BAND/Data")
@@ -25,13 +26,25 @@ visits <- read_xlsx("C:/Users/bgonzalez/DOI/NM Landscapes Field Station - Treehu
 files_all <- list.files(path = "C:/Users/bgonzalez/DOI/NM Landscapes Field Station - Treehugger_BAND/Data",     # Identify all csv files in folder
                         pattern = "*TH", full.names = TRUE) 
 
+file <- paste0(getwd(), "/","Data","/" ,"TH-19035.csv")
+
 ### combining multiple file names from stackoverflow: 
 data_all <- purrr::map_df(files_all, function(x) {
   
-  data <- read_csv(x)
+  data <-read_csv(x,col_types = list(col_character(),col_character(), 
+                                     col_double(),col_double(),col_double(),col_double(),
+                                     col_double(),col_double(),col_double(),col_double()))
   cbind(file_id = x, data)
   
 })
+
+# junk data at the end -- drop 
+data_all<- data_all[1:11]
+
+## fix date and time types 
+data_all$Date <- as.Date(data_all$Date, tryFormats = c("%Y-%m-%d", "%m/%d/%Y"))
+
+data_all$Time <-parse_date_time(data_all$Time, "HM")
 
 # simplify file id 
 data_all$file_id<- cbind(file_id= substr(data_all$file_id, start= nchar(files_all[1])-11, stop = nchar(files_all)[1]-4))
@@ -48,58 +61,112 @@ data_all <- data_all %>% mutate(raw_chg_mm = data_all$mm - data_all$mm2)
 
 # select only Daily measurements @5am - second arg in grep is string to look in  -
 # so select anything that has 05 in that string and return the col 
-d_daily_all <- data_all[grep("05:",substr(data_all$Time,1,3)),]
+d_daily_all <- data_all[grep("05:",substr(data_all$Time,12,14)),]
 
-# look for big jumps or errors to fix
+# char dates to plot later 
+d_daily_all$Time<- paste(hour(d_daily_all$Time),minute(d_daily_all$Time), sep=":")
+
+# get rid of NAs that may be messing up the data -- usually csv files lack headers 
+d_daily_all<- d_daily_all[complete.cases(d_daily_all), ]
+
+
+#clear the dev before running script 
+for (i in dev.list()[1]:dev.list()[length(dev.list())]) {
+  dev.off()
+}
 
 # individual tree plots
 plot_list = list()
 
+## Bianx generating multiple plots with standard x/y scales 
 for (i in seq_along((unique(d_daily_all$tree)))) {
   
+  # to get visit date
   # create df with only the tree type (13)
   temp = d_daily_all[grep(unique(d_daily_all$tree)[i], d_daily_all$tree),]
   
   # pass unique df to put in plot list 
-  p = ggplot(temp, aes(x=mdy(Date), y=raw_chg_mm, group = 1)) +
+  p = ggplot(temp, aes(x=ymd(Date), y=raw_chg_mm, group = 1)) +
     geom_line() + theme(axis.text.x = element_text(angle = 70, hjust = 1))+
     geom_smooth()+ 
-    # add plot visit dates 
-    geom_vline(data = visits,
-               aes(xintercept = as.Date(visits[which(unique(temp$tree)==names(visits))][[1]]),
-                   col = "Visit Dates"))+
+    # add plot visit dates -- breaks the code!! 
+    # geom_vline(data = visits,
+    #            aes(xintercept = as.Date(visits[which(unique(temp$tree)==names(visits))][[1]]),
+    #                col = "Visit Dates"))+
     labs(y= "Change in mm", x = "Dates")+
-    labs(title = unique(temp$tree))
+    labs(title = unique(temp$tree))+
+    ylim(-.015, .015)+
+    xlim(ymd(min(temp$Date)), ymd(max(temp$Date)))
   
   # save plots 
   plot_list[[i]] = p
+  #print(plot_list[i])
   
-  #facet_grid(site~tree)
-  
+  # save plots to tiff using tiff function and filepath name
+   file_name = paste0(getwd(),"/Figures/test/", unique(temp$tree), ".tiff", sep="")
+   tiff(file_name)
+   print(plot_list[[i]])
+   print(i)
+  # dev.off
 }
 
-# Save plots to tiff.
-for (i in seq_along((unique(d_daily_all$tree)))) {
+olot# individual tree plots
+# one tree per plot for all lower sites 
+# facet is individual trees. 
+
+bs_plots = list()
+
+for (i in seq_along((unique(d_daily_all$site)))) {
+
+  # create df with only site type
+  temp = d_daily_all[grep(unique(d_daily_all$site)[i], d_daily_all$site),]
   
-  file_name = paste0(getwd(),"/Figures/bianx/", "data_all_", i, ".tiff", sep="")
+  # create ggplot
+  b = ggplot(temp, aes(x=mdy(Date), y=raw_chg_mm, group = 1)) +
+    geom_line() + theme(axis.text.x = element_text(angle = 70, hjust = 1))+
+    geom_smooth()+ 
+    # add plot visit dates 
+    # geom_vline(data = visits,
+    #            aes(xintercept = as.Date(visits[which(unique(temp$tree)==names(visits))][[1]]),
+    #                col = "Visit Dates"))+
+    labs(y= "Change in mm", x = "Dates")+
+    labs(title = unique(temp$tree))+
+    ylim(-.015, .015)+
+    xlim(mdy(min(temp$Date)), mdy(max(temp$Date)))+ 
+    facet_wrap(~tree)
+  # pass unique df to put in plot list 
+ 
+  # save plots 
+  bs_plots[[i]] = b
+  
+  # save plots to tiff
+  file_name = paste0(getwd(),"/Figures/bianx/", unique(temp$site),"site", ".tiff", sep="")
   tiff(file_name)
-  print(plot_list[[i]])
+  print(bs_plots[[i]])
   dev.off()
 }
+
 
 # Kay wants a plot of all trees with an average line of growth 
 avg_all_plt <- ggplot(d_daily_all, aes(x=mdy(Date), y=raw_chg_mm, group = 1, col=tree)) +
   geom_line() + theme(axis.text.x = element_text(angle = 70, hjust = 1))+
   # add plot visit dates 
-   # geom_vline(data = visits,
-   #            aes(xintercept = as.Date(visits[which(unique(d_daily_all$tree)==names(visits))][[1]]),
-   #                col = "Visit Dates"))+
+  # geom_vline(data = visits,
+  #            aes(xintercept = as.Date(visits[which(unique(d_daily_all$tree)==names(visits))][[1]]),
+  #                col = "Visit Dates"))+
   labs(y= "Change in mm", x = "Dates")+
   stat_summary(fun.y=mean, aes(group=1), geom="line", colour="blue", size=1, shape=4)+ 
   facet_wrap(~site)+
-  labs(title = "Change in Growth of Tree Hugger banded trees in Bandelier National Monument")
+  labs(title = "Change in Growth of Tree Hugger trees in Bandelier National Monument")+
+  ylim(-.015,.015)+
+  xlim(mdy(c("12/12/2019", "03/25/2020")))
+
+
+file_name = paste0(getwd(),"/Figures/bianx/", "tree", unique(temp$tree), ".tiff", sep="")
 
 ggplotly(avg_all_plt)
+
+
 
 #### Jen's processing ####
 for(n in tree_list$csv_name){
